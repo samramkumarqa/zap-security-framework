@@ -1,0 +1,40 @@
+name: Security scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      fail_on_risk:
+        description: 'Fail the build at or above this risk (HIGH, MEDIUM, LOW)'
+        required: false
+        default: HIGH
+
+jobs:
+  zap-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      # Chrome is pre-installed on GitHub runners; Selenium Manager fetches the matching driver.
+      # Docker and compose are pre-installed too. The script starts Juice Shop + ZAP, scans, then tears down.
+      - name: Run ZAP security scan
+        env:
+          FAIL_ON_RISK: ${{ github.event.inputs.fail_on_risk || 'HIGH' }}
+        run: scripts/run-scan.sh -Dfail.on.risk="$FAIL_ON_RISK"
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: zap-report
+          path: target/zap-report/
+          if-no-files-found: ignore
